@@ -1,0 +1,45 @@
+#Melting Ni alloy at melting Temperature 
+# ------------------------ INITIALIZATION ----------------------------
+units 		metal
+dimension	3
+boundary	p   p	p
+atom_style	atomic
+
+# ----------------------- ATOM DEFINITION ----------------------------
+read_data        Ni.lmp 
+
+
+# ------------------------ FORCE FIELDS ------------------------------
+
+pair_style   eam/alloy
+pair_coeff	 * * Ni_Zhou04.eam.alloy Ni 
+
+velocity       all      create 300 4928459 mom yes rot yes dist gaussian units box
+
+# ------------------------- SETTINGS ---------------------------------
+compute    1 all stress/atom NULL
+compute    2 all reduce sum c_1[1] c_1[2] c_1[3]
+compute peratom all pe/atom 
+
+######################################
+# MELTING PHASE
+# Gradually heat the system from 300 K to 1600 K to observe melting
+reset_timestep	0
+#neighbor            0.2 bin
+#neigh_modify        every 2 delay 10 check yes page 100000
+
+timestep 0.01
+velocity all create 300 5789877 mom yes rot no
+reset_timestep	0
+fix 1 all npt temp 300 1750 1 iso 0 0 1 drag 1 
+
+# Set thermo output
+thermo 100
+thermo_style custom step press temp etotal vol
+
+
+# Dump atomic positions every 1000 steps for visualization
+dump 1 all atom 1000 Ni_dump.final 
+# Run for 100 picoseconds (100,000 steps) to allow the system to melt
+run 50000
+unfix 1
