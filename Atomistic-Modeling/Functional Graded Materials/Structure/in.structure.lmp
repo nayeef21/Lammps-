@@ -1,4 +1,6 @@
 # Functionally Graded Alloy (Ni-Al) along z
+#Created by Rehad Nayeef on 21/09/2025 at 10.14 pm 
+# Script is under developing stage
 units           metal
 atom_style      atomic
 boundary        p p p
