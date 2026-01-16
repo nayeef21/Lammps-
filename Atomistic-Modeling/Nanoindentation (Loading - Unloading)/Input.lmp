@@ -1,0 +1,129 @@
+
+
+clear
+# ---------------- Initialization ----------------
+units           metal
+dimension       3
+boundary        p s p
+atom_style      atomic
+neighbor 2.0 bin
+neigh_modify delay 0 every 1 check yes
+
+# ---------------- Structure Input ----------------
+# Read pre-built alloy structure
+read_data       alloy.lmp
+
+minimize 1.0e-6 1.0e-6 1000 10000
+
+# ---------------- Groups Definition ----------------
+region	1 block  INF INF INF 10 INF INF units box
+group	lower region 1
+region 2 block INF INF 10 20 INF INF units box
+group thermo region 2
+group mobile subtract all lower thermo
+
+
+# ---------------- Potential (MEAM for Al-Cu-Mg) ----------------
+pair_style      meam
+pair_coeff      * * library.meam Al Si Mg Cu Fe alloy.meam Al Mg Cu
+
+# ---------------- Computes ----------------
+compute	        new all temp
+compute         peratom all pe/atom
+compute         csym all centro/atom fcc
+compute         disloc all displace/atom 
+compute         new1 all coord/atom cutoff 3.0            
+
+fix		1 lower setforce 0.0 0.0 0.0
+fix     2 thermo langevin 10.0 10.0 0.01 12345
+fix     3 mobile nve
+
+# ---------------- Equilibration ----------------
+reset_timestep	0
+timestep        0.001
+velocity all create 10 12345 mom yes rot no 
+fix     4 all nvt temp 10.0 10.0 0.01 drag 1.0
+#fix 4 all npt temp 300.0 300.0 0.1 iso 0.0 0.0 1.0
+#fix		        8 all temp/rescale 100 10 10 1 1
+
+thermo          100
+thermo_style    custom step lx ly lz press pxx pyy pzz pe temp
+run             100
+unfix 4
+
+# ---------- indentation (Loading) -------------------------------------------
+variable indent_depth equal 0.02    # Target indentation depth (Angstrom)
+variable indent_speed equal 0.1    # Indentation speed (Angstrom/ps)
+variable retract_speed equal 0.1    # Retraction speed (Angstrom/ps)
+
+#set indenter at the middle of X and Z dimention
+variable xmid equal lx/2
+variable zmid equal lz/2
+
+variable y_initial equal 97.2
+variable y_surface equal 89.1      # Approximate surface position
+variable y_target equal "v_y_surface - v_indent_depth"
+
+# Calculate timing
+variable indent_steps equal "v_indent_depth / (v_indent_speed * dt)"
+variable retract_steps equal "v_indent_depth / (v_retract_speed * dt)"
+
+print "Indentation will take ${indent_steps} steps"
+print "Target depth: ${indent_depth} Angstrom"
+print "Retraction will take ${retract_steps} steps"
+
+# Output variables
+variable disp equal "step*dt*v_indent_speed"
+variable f1 equal f_5[1] 
+variable f2 equal f_5[2] 
+variable f3 equal f_5[3] 
+variable stp equal step
+
+thermo 100 
+
+# PHASE 1: INDENTATION TO TARGET DEPTH
+#-----------------------------------------------------------------------------
+print "=== PHASE 1: INDENTATION ==="
+reset_timestep	0
+timestep        0.001
+
+variable y_indent equal "v_y_initial - step*dt*v_indent_speed"
+fix 5 all indent 10.0 sphere ${xmid} v_y_indent ${zmid} 10 units box
+#fix 11 all move linear 0.0 -0.0002 0.0 units box # downward in y
+
+thermo_style custom step temp v_y_indent f_5[2] v_disp
+fix output1 all print 100 "${stp} ${disp} ${f2} INDENT" title "step disp load  phase" file indentation_data.txt screen no
+# ---------------- Run Indentation ---------------- 
+# Run until target depth is reached
+run ${indent_steps}
+
+#-----------------------------------------------------------------------------
+# PHASE 2: RETRACTION
+#-----------------------------------------------------------------------------
+print "=== PHASE 2: RETRACTION ==="
+unfix 5
+unfix output1
+
+# Store the last indentation position as reference
+variable step_offset equal step
+variable y_start_retract equal "v_y_initial - v_indent_depth"
+#variable y_retract equal "v_y_target + step*dt*v_retract_speed"
+variable y_retract equal "v_y_start_retract + step*dt*v_retract_speed"
+# Displacement measured from max penetration
+variable disp_retract equal "v_indent_depth - step*dt*v_retract_speed"
+
+#variable disp_retract equal "v_indent_depth - (step - v_step_offset)*dt*v_retract_speed"
+
+fix 5 all indent 10.0 sphere ${xmid} v_y_retract ${zmid} 10.0 units box
+
+thermo_style custom step temp v_y_retract f_5[2] v_disp_retract
+fix output3 all print 100 "${stp} ${disp_retract} ${f2} RETRACT" append indentation_data.txt screen no
+
+# Retract to original position
+run ${retract_steps}
+
+dump myDump all atom 100 dump.atom 
+
+print "Indentation simulation completed!"
+print "Data saved to: indentation_data.txt"
+print "Trajectory saved to: cryst_indent_controlled.lammpstrj"
