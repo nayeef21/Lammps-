@@ -1,5 +1,7 @@
-
-
+#Created by Rehad Nayeef on 21/12/2025 at 10.14 pm 
+# Script is under developing stage
+# Advanced Indentation Simulation with Multiple Control Methods
+# Indentation was employ at y axis 
 clear
 # ---------------- Initialization ----------------
 units           metal
