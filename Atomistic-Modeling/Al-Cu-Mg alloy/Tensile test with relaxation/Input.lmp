@@ -40,7 +40,6 @@ unfix 1
 
 
 # Store final cell length for strain calculations
-#change_box all boundary p p s
 
 variable tmp equal "lx"
 variable L0 equal ${tmp}
